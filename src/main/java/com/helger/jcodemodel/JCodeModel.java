@@ -40,6 +40,8 @@
  */
 package com.helger.jcodemodel;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -60,6 +62,8 @@ import javax.lang.model.util.Elements;
 import com.helger.commons.ValueEnforcer;
 import com.helger.commons.io.file.FilenameHelper;
 import com.helger.commons.string.StringHelper;
+import com.helger.jcodemodel.compile.DynamicClassLoader;
+import com.helger.jcodemodel.compile.MemoryCodeWriter;
 import com.helger.jcodemodel.exceptions.JCaseSensitivityChangeException;
 import com.helger.jcodemodel.exceptions.JCodeModelException;
 import com.helger.jcodemodel.exceptions.JInvalidFileNameException;
@@ -71,6 +75,7 @@ import com.helger.jcodemodel.util.EFileSystemConvention;
 import com.helger.jcodemodel.util.FSName;
 import com.helger.jcodemodel.util.IFileSystemConvention;
 import com.helger.jcodemodel.util.JCSecureLoader;
+import com.helger.jcodemodel.writer.JCMWriter;
 
 /**
  * Root of the code DOM.
@@ -223,7 +228,7 @@ public class JCodeModel implements Serializable
    */
   @Nonnull
   public final IFileSystemConvention setFileSystemConvention (@Nonnull final IFileSystemConvention aFSConvention) throws JCaseSensitivityChangeException,
-                                                                                                                  JInvalidFileNameException
+  JInvalidFileNameException
   {
     ValueEnforcer.notNull (aFSConvention, "FSConvention");
     if (aFSConvention == m_aFSConvention)
@@ -464,15 +469,15 @@ public class JCodeModel implements Serializable
    */
   @Nonnull
   public JDefinedClass _class (final int nMods,
-                               @Nonnull final String sFullyQualifiedClassName,
-                               @Nonnull final EClassType eClassType) throws JCodeModelException
+      @Nonnull final String sFullyQualifiedClassName,
+      @Nonnull final EClassType eClassType) throws JCodeModelException
   {
     final int nIdx = sFullyQualifiedClassName.lastIndexOf (JPackage.SEPARATOR);
     if (nIdx < 0)
       return rootPackage ()._class (nMods, sFullyQualifiedClassName, eClassType);
     return _package (sFullyQualifiedClassName.substring (0, nIdx))._class (nMods,
-                                                                           sFullyQualifiedClassName.substring (nIdx + 1),
-                                                                           eClassType);
+        sFullyQualifiedClassName.substring (nIdx + 1),
+        eClassType);
   }
 
   /**
@@ -520,7 +525,7 @@ public class JCodeModel implements Serializable
    */
   @Nonnull
   public JDefinedClass _class (@Nonnull final String sFullyQualifiedClassName,
-                               @Nonnull final EClassType eClassType) throws JCodeModelException
+      @Nonnull final EClassType eClassType) throws JCodeModelException
   {
     return _class (JMod.PUBLIC, sFullyQualifiedClassName, eClassType);
   }
@@ -769,7 +774,7 @@ public class JCodeModel implements Serializable
    */
   @Nonnull
   public JDefinedClass ref (@Nonnull final TypeElement aElement, @Nonnull final Elements aElementUtils) throws ErrorTypeFound,
-                                                                                                        CodeModelBuildingException
+  CodeModelBuildingException
   {
     final JCodeModelJavaxLangModelAdapter adapter = new JCodeModelJavaxLangModelAdapter (this, aElementUtils);
     return adapter.getClass (aElement);
@@ -806,7 +811,7 @@ public class JCodeModel implements Serializable
    */
   @Nonnull
   public JDefinedClass refWithErrorTypes (@Nonnull final TypeElement aElement,
-                                          @Nonnull final Elements aElementUtils) throws CodeModelBuildingException
+      @Nonnull final Elements aElementUtils) throws CodeModelBuildingException
   {
     final JCodeModelJavaxLangModelAdapter adapter = new JCodeModelJavaxLangModelAdapter (this, aElementUtils);
     return adapter.getClassWithErrorTypes (aElement);
@@ -1082,5 +1087,168 @@ public class JCodeModel implements Serializable
   public Set <AbstractJClass> getAllDontImportClasses ()
   {
     return new HashSet <> (m_aDontImportClasses);
+  }
+
+  public class JCMCreate
+  {
+    @Nonnull
+    public JDefinedClass _class (@Nonnull final String sFullyQualifiedClassName) throws JCodeModelException
+    {
+      return JCodeModel.this._class (sFullyQualifiedClassName);
+    }
+
+    @Nonnull
+    public JDefinedClass _class (final int nMods, @Nonnull final String sFullyQualifiedClassName)
+        throws JCodeModelException
+    {
+      return JCodeModel.this._class (nMods, sFullyQualifiedClassName);
+    }
+
+    @Nonnull
+    public JDefinedClass _class (
+        final int nMods,
+        @Nonnull final String sFullyQualifiedClassName,
+        @Nonnull final EClassType eClassType) throws JCodeModelException
+    {
+      return JCodeModel.this._class (nMods, sFullyQualifiedClassName, eClassType);
+    }
+
+    @Nonnull
+    public JPackage _package (@Nonnull final String sName)
+    {
+      return JCodeModel.this._package (sName);
+    }
+  }
+
+  private transient JCMCreate create = new JCMCreate ();
+
+  public JCMCreate create ()
+  {
+    return create;
+  }
+
+  public class JCMExpr
+  {
+
+    @Nonnull
+    public JInvocation _new (@Nonnull final AbstractJType aType)
+    {
+      return JExpr._new (aType);
+    }
+
+    @Nonnull
+    public JAtom _this ()
+    {
+      return JExpr._this ();
+    }
+
+    @Nonnull
+    public JAtom _super ()
+    {
+      return JExpr._super ();
+    }
+
+    @Nonnull
+    public IJExpression dotClass (@Nonnull final AbstractJType aClass)
+    {
+      return JExpr.dotClass (aClass);
+    }
+
+    public AbstractJClass wildcard ()
+    {
+      return JCodeModel.this.wildcard ();
+    }
+  }
+
+  private transient JCMExpr expr = new JCMExpr ();
+
+  public JCMExpr expr ()
+  {
+    return expr;
+  }
+
+  public class JCMRef
+  {
+
+    @Nonnull
+    public JAtom _bool (final boolean n)
+    {
+      return JExpr.lit (n);
+    }
+
+    @Nonnull
+    public JAtom _char (final char n)
+    {
+      return JExpr.lit (n);
+    }
+
+    @Nonnull
+    public AbstractJType _class (@Nonnull final Class <?> aClass)
+    {
+      return _ref (aClass);
+    }
+
+    @Nonnull
+    public JAtomDouble _double (final double n)
+    {
+      return JExpr.lit (n);
+    }
+
+    @Nonnull
+    public JAtomFloat _float (final float n)
+    {
+      return JExpr.lit (n);
+    }
+
+    @Nonnull
+    public JAtomInt _int (final int n)
+    {
+      return JExpr.lit (n);
+    }
+
+    @Nonnull
+    public JAtomLong _long (final long n)
+    {
+      return JExpr.lit (n);
+    }
+
+    public JAtom _null ()
+    {
+      return JExpr._null ();
+    }
+
+    public JStringLiteral string (@Nonnull final String sStr)
+    {
+      return JExpr.lit (sStr);
+    }
+
+  }
+
+  private transient JCMRef ref = new JCMRef ();
+
+  public JCMRef ref ()
+  {
+    return ref;
+  }
+
+  public class JCMWrite
+  {
+
+    public void toFile (File f) throws IOException
+    {
+      new JCMWriter (JCodeModel.this).build (f);
+    }
+
+    public DynamicClassLoader toMemory ()
+    {
+      return MemoryCodeWriter.from (JCodeModel.this).compile ();
+    }
+  }
+
+  private transient JCMWrite write = new JCMWrite ();
+
+  public JCMWrite write ()
+  {
+    return write;
   }
 }
